@@ -1,10 +1,9 @@
-# Knovator DevOps Task
+# Knovator Task – Full CI/CD Pipeline with Docker, Node.js, React & GitLab
 
-A comprehensive DevOps implementation containerized application deployment with Gitlab CI/CD automation and scalable architecture design.
-
+This project demonstrates a complete CI/CD pipeline setup where both frontend (React) and backend (Node.js) applications are containerized, built, and deployed using Docker and GitLab CI/CD.
+The images are pushed to GitLab Container Registry and deployed on a server with Docker Compose.
 
 ### Overview
-
 This project demonstrates a complete DevOps workflow implementing:
 
 - **Containerized Applications**: Multi-stage Docker builds for Node.js backend and React frontend
@@ -32,14 +31,18 @@ knovator-task/
 ```
 
 ### Tech Stack
-
+- **Backend:** Node.js, Express.js
+- **Frontend:** React.js
+- **Containerization:** Docker, Docker Compose
+- **CI/CD:** GitLab CI/CD
+- **Image Registry:** GitLab Container Registry
+- **Deployment:** Ubuntu Server with Docker
 - **Operating System**: Ubuntu 20.04 LTS
-- **Docker**: Version 20.10+
-- **Docker Compose**: Version 2.0+
-- **GitLab Runner**: Self-hosted VM-based runner
-- **Git**: Version 2.25+
 
-### Step 1: Application Containerization
+
+### Step 1: Application Containerization 
+### Server Setup on AWS 
+<img width="1093" height="177" alt="image" src="https://github.com/user-attachments/assets/71f70284-1a31-40c3-9c56-4cf9338c9674" />
 
 #### Frontend (React)
 **Multi-stage Dockerfile optimizations:**
@@ -47,6 +50,7 @@ knovator-task/
 - **Production Stage**: Lightweight Nginx Alpine for serving
 - **Benefits**: smaller image size, enhanced security
 
+**Frontend Dockerfile**
 ```dockerfile
 # Build stage
 FROM node:16-alpine AS build
@@ -63,6 +67,7 @@ COPY frontend/nginx.conf /etc/nginx/conf.d/default.conf
 EXPOSE 80
 CMD ["nginx", "-g", "daemon off;"]
 ```
+<img width="1090" height="508" alt="image" src="https://github.com/user-attachments/assets/bbc5362d-5287-4110-81be-a77d8b1290b1" />
 
 #### Backend (Node.js)
 
@@ -71,6 +76,7 @@ CMD ["nginx", "-g", "daemon off;"]
 - Layer caching for faster builds
 - Production-only dependencies
 
+**Backend Dockerfile**
 ```dockerfile
 FROM node:16-alpine
 WORKDIR /app
@@ -80,6 +86,7 @@ COPY backend/. .
 EXPOSE 3000
 CMD ["npm", "start"]
 ```
+<img width="1093" height="138" alt="image" src="https://github.com/user-attachments/assets/9f739abd-ed99-4421-b407-66678b33e39d" />
 
 #### Nginx Reverse Proxy Configuration
 
@@ -105,68 +112,8 @@ server {
     }
 }
 ```
+<img width="1093" height="138" alt="image" src="https://github.com/user-attachments/assets/04b20f44-e9e2-4c36-bf7a-e27c6db3b258" />
 
-### Step 2: CI/CD Pipeline With Gitlab
-
-#### Pipeline Stages
-
-1. **Build & Push**: Automated Docker image creation and registry upload
-2. **Deploy**: Automated deployment to target environments
-
-#### GitLab CI/CD Configuration
-
-```yaml
-stages:
-  - build_and_push
-  - deploy
-
-variables:
-  DOCKER_DRIVER: overlay2
-  DOCKER_TLS_CERTDIR: ""
-  FRONTEND_IMAGE: registry.gitlab.com/sandiprathore29-group/knovator_task/frontend:latest
-  BACKEND_IMAGE: registry.gitlab.com/sandiprathore29-group/knovator_task/backend:latest
-
-frontend:
-  stage: build_and_push
-  image: docker:latest
-  services:
-    - docker:dind
-  script:
-    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
-    - docker build -t $FRONTEND_IMAGE -f frontend/Dockerfile .
-    - docker push $FRONTEND_IMAGE
-  only:
-    - main
-
-backend:
-  stage: build_and_push
-  image: docker:latest
-  services:
-    - docker:dind
-  script:
-    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
-    - docker build -t $BACKEND_IMAGE -f backend/Dockerfile .
-    - docker push $BACKEND_IMAGE
-  only:
-    - main
-
-deploy:
-  stage: deploy
-  image: alpine:latest
-  script:
-    - echo "Deploying to production environment"
-    - # Add deployment commands here
-  only:
-    - main
-  when: manual
-```
-
-#### Security Features
-
-- **Registry Authentication**: Secure image storage
-- **Environment Variables**: Sensitive data protection
-- **Branch Protection**: Main branch deployment only
-- **Manual Deployment**: Production safety gate
 
 #### Docker Compose 
 
@@ -183,6 +130,85 @@ services:
       - "3000:3000"
 ```
 
+### Step 2: CI/CD Pipeline With Gitlab
+
+#### Pipeline Stages
+
+1. **Build & Push**: Automated Docker image creation and registry upload when code pushed/ merge in main branch
+2. **Deploy**: Deploy the latest images on the server
+
+#### GitLab CI/CD Configuration
+
+```yaml
+stages:
+  - build_and_push
+  - deploy
+
+variables:
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: ""   # required for docker:dind
+  FRONTEND_IMAGE: registry.gitlab.com/sandiprathore29-group/knovator_task/frontend:latest
+  BACKEND_IMAGE: registry.gitlab.com/sandiprathore29-group/knovator_task/backend:latest
+
+# Build and push frontend
+frontend:
+  stage: build_and_push
+  image: docker:24
+  services:
+    - docker:dind
+  variables:
+    DOCKER_HOST: "tcp://docker:2375"
+  script:
+    - docker info
+    - echo $CI_REGISTRY_PASSWORD | docker login -u $CI_REGISTRY_USER --password-stdin $CI_REGISTRY
+    - docker build -t $FRONTEND_IMAGE -f frontend/Dockerfile .
+    - docker push $FRONTEND_IMAGE
+
+# Build and push backend
+backend:
+  stage: build_and_push
+  image: docker:24
+  services:
+    - docker:dind
+  variables:
+    DOCKER_HOST: "tcp://docker:2375"
+  script:
+    - docker info
+    - echo $CI_REGISTRY_PASSWORD | docker login -u $CI_REGISTRY_USER --password-stdin $CI_REGISTRY
+    - docker build -t $BACKEND_IMAGE -f backend/Dockerfile .
+    - docker push $BACKEND_IMAGE
+
+# Deploy stage
+deploy:
+  stage: deploy
+  image: docker:24-cli
+  tags:
+    - deploy
+  before_script:
+    - docker --version
+    - docker compose version
+    # Authenticate to GitLab registry
+    - echo $CI_REGISTRY_PASSWORD | docker login -u $CI_REGISTRY_USER --password-stdin $CI_REGISTRY
+  script:
+    - echo "Pulling latest images..."
+    - docker compose pull
+    - echo "Restarting services..."
+    - docker compose up -d
+    - echo "Cleaning up unused images..."
+    - docker image prune -f
+  only:
+    - main
+```
+<img width="1153" height="317" alt="image" src="https://github.com/user-attachments/assets/19721e17-c5a8-4db7-8d71-9bd434e1143c" />
+
+#### Security Features
+
+- **Registry Authentication**: Secure image storage
+- **Environment Variables**: Sensitive data protection
+- **Branch Protection**: Main branch deployment only
+- **Manual Deployment**: Production safety gate
+
+
 #### GitLab Runner Setup
 ```bash
 # Install GitLab Runner
@@ -197,18 +223,11 @@ sudo gitlab-runner register \
   --description "knovator-runner" \
   --docker-image "alpine:latest"
 ```
+<img width="1086" height="445" alt="image" src="https://github.com/user-attachments/assets/515a8e11-db5b-448d-bfb4-fb7bd2ca805b" />
 
-**Gitlab configuration and CICD**
-<img width="1338" height="541" alt="image" src="https://github.com/user-attachments/assets/2036677d-f613-4a3f-9c95-aa0cb8a12f1c" />
-<img width="1338" height="541" alt="image" src="https://github.com/user-attachments/assets/ad02c8d3-805d-401b-823e-6586c1e6521a" />
-<img width="1338" height="541" alt="image" src="https://github.com/user-attachments/assets/387be3f0-b577-4e34-b2f3-2a23f85c4647" />
 
 **Access the application**
-   - Frontend: http://localhost
-   - Backend API: http://localhost:3000
-   - Full application: http://localhost:8080
-   - nginx proxy: http://localhost/api to http://localhost:3000
-<img width="1358" height="556" alt="image" src="https://github.com/user-attachments/assets/eab89eee-e899-401d-b954-998afc2e1a60" />
-<img width="1362" height="139" alt="image" src="https://github.com/user-attachments/assets/8c87f1e9-9aa1-422a-bbbc-f82d88bc52d1" />
-<img width="1358" height="556" alt="image" src="https://github.com/user-attachments/assets/12d01481-6098-4990-b650-4a82fcee12b3" />
+   - Frontend: http://43.205.142.123/
+   - Backend API: http://43.205.142.123:3000/
+   - nginx proxy: http://43.205.142.123/api/ to http://43.205.142.123:3000/
 
