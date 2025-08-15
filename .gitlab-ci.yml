@@ -1,0 +1,59 @@
+stages:
+  - build_and_push
+  - deploy
+
+variables:
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: ""   # required for docker:dind
+  FRONTEND_IMAGE: registry.gitlab.com/sandiprathore29-group/knovator_task/frontend:latest
+  BACKEND_IMAGE: registry.gitlab.com/sandiprathore29-group/knovator_task/backend:latest
+
+# Build and push frontend
+frontend:
+  stage: build_and_push
+  image: docker:24
+  services:
+    - docker:dind
+  variables:
+    DOCKER_HOST: "tcp://docker:2375"
+  script:
+    - docker info
+    - echo $CI_REGISTRY_PASSWORD | docker login -u $CI_REGISTRY_USER --password-stdin $CI_REGISTRY
+    - docker build -t $FRONTEND_IMAGE -f frontend/Dockerfile .
+    - docker push $FRONTEND_IMAGE
+
+# Build and push backend
+backend:
+  stage: build_and_push
+  image: docker:24
+  services:
+    - docker:dind
+  variables:
+    DOCKER_HOST: "tcp://docker:2375"
+  script:
+    - docker info
+    - echo $CI_REGISTRY_PASSWORD | docker login -u $CI_REGISTRY_USER --password-stdin $CI_REGISTRY
+    - docker build -t $BACKEND_IMAGE -f backend/Dockerfile .
+    - docker push $BACKEND_IMAGE
+
+# Deploy stage
+deploy:
+  stage: deploy
+  image: docker:24-cli
+  tags:
+    - deploy
+  before_script:
+    - docker --version
+    - docker compose version
+    # Authenticate to GitLab registry
+    - echo $CI_REGISTRY_PASSWORD | docker login -u $CI_REGISTRY_USER --password-stdin $CI_REGISTRY
+  script:
+    - echo "Pulling latest images..."
+    - docker compose pull
+    - echo "Restarting services..."
+    - docker compose up -d
+    - echo "Cleaning up unused images..."
+    - docker image prune -f
+  only:
+    - main
+

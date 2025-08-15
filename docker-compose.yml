@@ -1,0 +1,10 @@
+version: "3"
+services:
+  frontend:
+    image: registry.gitlab.com/sandiprathore29-group/knovator_task/frontend:latest
+    ports:
+      - "80:80"
+  backend:
+    image: registry.gitlab.com/sandiprathore29-group/knovator_task/backend:latest
+    ports:
+      - "3000:3000"
