@@ -226,8 +226,3 @@ sudo gitlab-runner register \
 <img width="1086" height="445" alt="image" src="https://github.com/user-attachments/assets/515a8e11-db5b-448d-bfb4-fb7bd2ca805b" />
 
 
-**Access the application**
-   - Frontend: http://43.205.142.123/
-   - Backend API: http://43.205.142.123:3000/
-   - nginx proxy: http://43.205.142.123/api/ to http://43.205.142.123:3000/
-
